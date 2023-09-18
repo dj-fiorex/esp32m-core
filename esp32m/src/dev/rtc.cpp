@@ -1,32 +1,28 @@
-#include "esp32m/defs.hpp"
 #include "apps/esp_sntp.h"
+#include "esp32m/defs.hpp"
 
 #include "esp32m/dev/rtc.hpp"
-#include "esp32m/net/sntp.hpp"
 #include "esp32m/ha/ha.hpp"
+#include "esp32m/net/sntp.hpp"
 /**
- * Use this library as template: https://github.com/UncleRus/esp-idf-lib/tree/master/examples/ds3231/default
+ * Use this library as template:
+ * https://github.com/UncleRus/esp-idf-lib/tree/master/examples/ds3231/default
  */
 
-namespace esp32m
-{
+namespace esp32m {
 
-  namespace rtc
-  {
+  namespace rtc {
 
-    uint8_t Settings::getInt() const
-    {
+    uint8_t Settings::getInt() const {
       return _int;
     }
-    void Settings::setInt(uint8_t value)
-    {
+    void Settings::setInt(uint8_t value) {
       if (_int == value)
         return;
       _int = value;
     }
 
-    Core::Core(I2C *i2c, const char *name) : _i2c(i2c)
-    {
+    Core::Core(I2C *i2c, const char *name) : _i2c(i2c) {
       _name = name;
       // _i2c->setEndianness(Endian::Little);
       // _i2c->setErrSnooze(30000);
@@ -48,21 +44,18 @@ namespace esp32m
     }
 
     // TODO: Find a better way to organize this
-    static uint8_t dec2bcd(uint8_t val)
-    {
+    static uint8_t dec2bcd(uint8_t val) {
       return ((val / 10) << 4) + (val % 10);
     }
 
     // TODO: Find a better way to organize this
-    static uint8_t bcd2dec(uint8_t val)
-    {
+    static uint8_t bcd2dec(uint8_t val) {
       return (val >> 4) * 10 + (val & 0x0f);
     }
 
     // TODO: Find a better way to organize this
     // Function to convert year, month, and day to days since January 1st
-    static inline int days_since_january_1st(int year, int month, int day)
-    {
+    static inline int days_since_january_1st(int year, int month, int day) {
       int days = day - 1;
       const int *ptr = days_per_month;
 
@@ -71,16 +64,14 @@ namespace esp32m
         ptr = days_per_month_leap_year;
 
       // Add days from previous months
-      for (int i = 0; i < month; i++)
-      {
+      for (int i = 0; i < month; i++) {
         days += ptr[i];
       }
 
       return days;
     }
 
-    esp_err_t Core::setTime(struct tm *time)
-    {
+    esp_err_t Core::setTime(struct tm *time) {
       // if (!_inited)
       //   return ESP_ERR_INVALID_STATE;
       uint8_t data[7];
@@ -102,8 +93,7 @@ namespace esp32m
       return ESP_OK;
     }
 
-    esp_err_t Core::getTime(struct tm *time)
-    {
+    esp_err_t Core::getTime(struct tm *time) {
       // if (!_inited)
       //   return ESP_ERR_INVALID_STATE;
       uint8_t data[7];
@@ -114,25 +104,24 @@ namespace esp32m
       /* convert to unix time structure */
       time->tm_sec = rtc::bcd2dec(data[0]);
       time->tm_min = rtc::bcd2dec(data[1]);
-      if (data[2] & DS3231_12HOUR_FLAG)
-      {
+      if (data[2] & DS3231_12HOUR_FLAG) {
         /* 12H */
         time->tm_hour = rtc::bcd2dec(data[2] & DS3231_12HOUR_MASK) - 1;
         /* AM/PM? */
         if (data[2] & DS3231_PM_FLAG)
           time->tm_hour += 12;
-      }
-      else
+      } else
         time->tm_hour = rtc::bcd2dec(data[2]); /* 24H */
       time->tm_wday = rtc::bcd2dec(data[3]) - 1;
       time->tm_mday = rtc::bcd2dec(data[4]);
       time->tm_mon = rtc::bcd2dec(data[5] & DS3231_MONTH_MASK) - 1;
       time->tm_year = rtc::bcd2dec(data[6]) + 100;
       time->tm_isdst = 0;
-      time->tm_yday = rtc::days_since_january_1st(time->tm_year, time->tm_mon, time->tm_mday);
+      time->tm_yday = rtc::days_since_january_1st(time->tm_year, time->tm_mon,
+                                                  time->tm_mday);
 
-      // apply a time zone (if you are not using localtime on the rtc or you want to check/apply DST)
-      // applyTZ(time);
+      // apply a time zone (if you are not using localtime on the rtc or you
+      // want to check/apply DST) applyTZ(time);
 
       // Log time
       char buf[32];
@@ -141,18 +130,149 @@ namespace esp32m
       return ESP_OK;
     }
 
-  } // namespace rtc
+    esp_err_t Core::ds3231_set_alarm(Alarm alarms, struct tm *time1,
+                                     Alarm1Rate option1, struct tm *time2,
+                                     Alarm2Rate option2) {
+      int i = 0;
+      uint8_t data[7];
 
-  namespace dev
-  {
+      /* alarm 1 data */
+      if (alarms != DS3231_ALARM_2) {
+        data[i++] =
+            (option1 >= DS3231_ALARM1_MATCH_SEC ? rtc::dec2bcd(time1->tm_sec)
+                                                : DS3231_ALARM_NOTSET);
+        data[i++] =
+            (option1 >= DS3231_ALARM1_MATCH_SECMIN ? rtc::dec2bcd(time1->tm_min)
+                                                   : DS3231_ALARM_NOTSET);
+        data[i++] = (option1 >= DS3231_ALARM1_MATCH_SECMINHOUR
+                         ? rtc::dec2bcd(time1->tm_hour)
+                         : DS3231_ALARM_NOTSET);
+        data[i++] =
+            (option1 == DS3231_ALARM1_MATCH_SECMINHOURDAY
+                 ? (rtc::dec2bcd(time1->tm_wday + 1) & DS3231_ALARM_WDAY)
+                 : (option1 == DS3231_ALARM1_MATCH_SECMINHOURDATE
+                        ? rtc::dec2bcd(time1->tm_mday)
+                        : DS3231_ALARM_NOTSET));
+      }
+
+      /* alarm 2 data */
+      if (alarms != DS3231_ALARM_1) {
+        data[i++] =
+            (option2 >= DS3231_ALARM2_MATCH_MIN ? rtc::dec2bcd(time2->tm_min)
+                                                : DS3231_ALARM_NOTSET);
+        data[i++] = (option2 >= DS3231_ALARM2_MATCH_MINHOUR
+                         ? rtc::dec2bcd(time2->tm_hour)
+                         : DS3231_ALARM_NOTSET);
+        data[i++] =
+            (option2 == DS3231_ALARM2_MATCH_MINHOURDAY
+                 ? (rtc::dec2bcd(time2->tm_wday + 1) & DS3231_ALARM_WDAY)
+                 : (option2 == DS3231_ALARM2_MATCH_MINHOURDATE
+                        ? rtc::dec2bcd(time2->tm_mday)
+                        : DS3231_ALARM_NOTSET));
+      }
+
+      ESP_CHECK_LOGW_RETURN(_i2c->write((alarms == Alarm::DS3231_ALARM_2
+                                             ? Register::DS3231_ADDR_ALARM2
+                                             : Register::DS3231_ADDR_ALARM1),
+                                        data, i),
+                            "failed to set time");
+
+      return ESP_OK;
+    }
+
+    esp_err_t Core::ds3231_get_alarm_flags(Alarm *alarms) {
+      uint8_t data;
+
+      /* get register */
+      /* get status register */
+      ESP_CHECK_LOGW_RETURN(_i2c->read(DS3231_ADDR_STATUS, &data, 1),
+                            "failed to get alarm flags");
+
+      /* return only requested flag */
+      *alarms = (Alarm)(data & DS3231_ALARM_BOTH);
+      return ESP_OK;
+    }
+
+    esp_err_t Core::ds3231_clear_alarm_flags(Alarm alarms) {
+      ds3231_set_flag(DS3231_ADDR_STATUS, alarms, DS3231_CLEAR);
+
+      return ESP_OK;
+    }
+
+    esp_err_t Core::ds3231_enable_alarm_ints(Alarm alarms) {
+      ds3231_set_flag(DS3231_ADDR_CONTROL, DS3231_CTRL_ALARM_INTS | alarms,
+                      DS3231_SET);
+
+      return ESP_OK;
+    }
+
+    esp_err_t Core::ds3231_disable_alarm_ints(Alarm alarms) {
+      ds3231_set_flag(DS3231_ADDR_CONTROL, alarms, DS3231_CLEAR);
+
+      return ESP_OK;
+    }
+
+    esp_err_t Core::ds3231_get_raw_temp(int16_t *temp) {
+      uint8_t data[2];
+
+      ESP_CHECK_LOGW_RETURN(_i2c->read(DS3231_ADDR_TEMP, &data, sizeof(data)),
+                            "failed to get raw temp");
+
+      *temp = (int16_t)(int8_t)data[0] << 2 | data[1] >> 6;
+
+      return ESP_OK;
+    }
+
+    esp_err_t Core::ds3231_get_temp_integer(int8_t *temp) {
+      int16_t t_int;
+
+      esp_err_t res = ds3231_get_raw_temp(&t_int);
+      if (res == ESP_OK)
+        *temp = t_int >> 2;
+
+      return res;
+    }
+
+    esp_err_t Core::ds3231_get_temp_float(float *temp) {
+      int16_t t_int;
+
+      esp_err_t res = ds3231_get_raw_temp(&t_int);
+      if (res == ESP_OK)
+        *temp = t_int * 0.25;
+
+      return res;
+    }
+
+    esp_err_t Core::ds3231_set_flag(Register addr, uint8_t bits,
+                                    AlarmFlag mode) {
+      uint8_t data;
+
+      /* get status register */
+      ESP_CHECK_LOGW_RETURN(_i2c->read(addr, &data, 1), "failed to set flag");
+
+      /* clear the flag */
+      if (mode == DS3231_REPLACE)
+        data = bits;
+      else if (mode == DS3231_SET)
+        data |= bits;
+      else
+        data &= ~bits;
+
+      ESP_CHECK_LOGW_RETURN(_i2c->write(addr, &data, 1), "failed to set flag");
+
+      return ESP_OK;
+    }
+
+  }  // namespace rtc
+
+  namespace dev {
 
     Rtc::Rtc(I2C *i2c, const char *name)
         : rtc::Core(i2c, name),
           _currentTime(this, "currentTime"),
           _alarm1(this, "alarm1"),
           _alarm2(this, "alarm2"),
-          _temperature(this, "temperature")
-    {
+          _temperature(this, "temperature") {
       auto group = sensor::nextGroup();
       _currentTime.group = group;
       _currentTime.precision = 2;
@@ -166,17 +286,13 @@ namespace esp32m
       Device::init(Flags::HasSensors);
     }
 
-    bool Rtc::initSensors()
-    {
-      return true; // sync(true) == ESP_OK;
+    bool Rtc::initSensors() {
+      return true;  // sync(true) == ESP_OK;
     }
 
-    void Rtc::handleEvent(Event &ev)
-    {
-      if (EventStateChanged::is(ev, &net::Sntp::instance()))
-      {
-        if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED)
-        {
+    void Rtc::handleEvent(Event &ev) {
+      if (EventStateChanged::is(ev, &net::Sntp::instance())) {
+        if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
           struct tm timeinfo;
           time_t now;
           time(&now);
@@ -186,8 +302,7 @@ namespace esp32m
       }
     }
 
-    bool Rtc::pollSensors()
-    {
+    bool Rtc::pollSensors() {
       float t = 0, p = 0, h = 0, l = 0;
       // ESP_CHECK_RETURN_BOOL(read(&t, &p, &h));
       sensor("temperature", t);
@@ -207,15 +322,16 @@ namespace esp32m
       return true;
     }
 
-    DynamicJsonDocument *Rtc::getState(const JsonVariantConst args)
-    {
+    DynamicJsonDocument *Rtc::getState(const JsonVariantConst args) {
       float t = 0, p = 0, h = 0, l = 0;
       // if (read(&t, &p, &h) != ESP_OK)
       // return nullptr;
       DynamicJsonDocument *doc = new DynamicJsonDocument(JSON_OBJECT_SIZE(7));
       JsonObject root = doc->to<JsonObject>();
       root["addr"] = _i2c->addr();
-      root["temperature"] = t;
+      int8_t temp;
+      ds3231_get_temp_integer(&temp);
+      root["temperature"] = temp;
       root["alarm1"] = p;
       // if (chipId() == bme280::ChipId::Bme280)
       root["alarm2"] = h;
@@ -229,11 +345,10 @@ namespace esp32m
       return doc;
     }
 
-    void useRtc(const char *name, uint8_t addr)
-    {
+    void useRtc(const char *name, uint8_t addr) {
       new Rtc(new I2C(addr), name);
     }
 
-  } // namespace dev
+  }  // namespace dev
 
-} // namespace esp32m
+}  // namespace esp32m
