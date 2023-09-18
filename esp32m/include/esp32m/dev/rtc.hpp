@@ -12,6 +12,9 @@ namespace esp32m
 
     const uint8_t DefaultAddress = 0x68;
 
+    const int days_per_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const int days_per_month_leap_year[] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
     /**
      * Alarms
      */
@@ -109,7 +112,8 @@ namespace esp32m
       {
         return _settings;
       }
-      esp_err_t setTime(struct timeval *tv);
+      esp_err_t setTime(struct tm *tv);
+      esp_err_t getTime(struct tm *tv);
 
     protected:
       uint8_t dec2bcd(uint8_t val);
@@ -132,6 +136,7 @@ namespace esp32m
       Rtc(const Rtc &) = delete;
 
     protected:
+      void handleEvent(Event &ev) override;
       DynamicJsonDocument *getState(const JsonVariantConst args) override;
       bool initSensors() override;
       bool pollSensors() override;
