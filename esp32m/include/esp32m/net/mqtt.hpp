@@ -1,6 +1,7 @@
 #pragma once
 
 #include "esp32m/app.hpp"
+#include "esp32m/device.hpp"
 #include "esp32m/fs/cache.hpp"
 #include "esp32m/resources.hpp"
 #include "esp32m/sleep.hpp"
@@ -126,7 +127,7 @@ namespace esp32m {
         friend class net::Mqtt;
       };
 
-      class StatePublisher : public AppObject {
+      /*class StatePublisher : public AppObject {
        public:
         StatePublisher(const StatePublisher &) = delete;
         const char *name() const override {
@@ -146,7 +147,29 @@ namespace esp32m {
         StatePublisher() {}
         esp_err_t publish(const char *name, JsonVariantConst state,
                           bool fromBuffer);
+      };*/
+
+      class StatePublisher : public sensor::StateEmitter {
+       public:
+        StatePublisher(const StatePublisher &) = delete;
+        const char *name() const override {
+          return "mqtt-sp";
+        };
+
+        static StatePublisher &instance() {
+          static StatePublisher i;
+          return i;
+        }
+
+       protected:
+        void handleEvent(Event &ev) override;
+        void emit(std::vector<const Sensor *> sensors) override;
+
+       private:
+        StatePublisher() {}
+        esp_err_t publish(const char *name, JsonVariantConst state);
       };
+
     }  // namespace mqtt
 
     using namespace mqtt;
@@ -214,7 +237,6 @@ namespace esp32m {
       mqtt::Message _lwt;
       std::unique_ptr<Resource> _cert;
       fs::CachedResource _certCache;
-      char *_sensorsTopic = nullptr;
       char *_broadcastTopic = nullptr;
       uint32_t _pubcnt = 0, _recvcnt = 0;
       unsigned long _timer = 0;
