@@ -2,7 +2,6 @@
 #include "esp32m/defs.hpp"
 
 #include "esp32m/dev/rtc.hpp"
-#include "esp32m/ha/ha.hpp"
 #include "esp32m/net/sntp.hpp"
 /**
  * Use this library as template:
@@ -305,12 +304,6 @@ namespace esp32m {
     bool Rtc::pollSensors() {
       float t = 0, p = 0, h = 0, l = 0;
       // ESP_CHECK_RETURN_BOOL(read(&t, &p, &h));
-      sensor("temperature", t);
-      sensor("alarm1", p);
-      sensor("alarm2", h);
-      // if (chipId() == bme280::ChipId::Bme280)
-      sensor("currentTime", l);
-
       bool changed = false;
       _temperature.set(t, &changed);
       _alarm1.set(p, &changed);
