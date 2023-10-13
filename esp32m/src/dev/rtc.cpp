@@ -309,7 +309,13 @@ namespace esp32m {
       _alarm1.set(p, &changed);
       // if (chipId() == bme280::ChipId::Bme280)
       _alarm2.set(h, &changed);
-      _currentTime.set(l, &changed);
+      // get time and print it
+      struct tm timeinfo;
+      getTime(&timeinfo);
+      char buf[32];
+      strftime(buf, sizeof(buf), "%F %T", &timeinfo);
+      _currentTime.set(buf, &changed);
+      logI("local time/date is %s", buf);
       if (changed)
         sensor::GroupChanged::publish(_currentTime.group);
       return true;
