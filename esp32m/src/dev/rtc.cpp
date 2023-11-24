@@ -123,8 +123,8 @@ namespace esp32m {
       // want to check/apply DST) applyTZ(time);
 
       // Log time
-      char buf[32];
-      strftime(buf, sizeof(buf), "%F %T", time);
+      // char buf[32];
+      // strftime(buf, sizeof(buf), "%F %T", time);
 
       return ESP_OK;
     }
@@ -283,6 +283,17 @@ namespace esp32m {
       _temperature.group = group;
       _temperature.precision = 0;
       Device::init(Flags::HasSensors);
+
+      // Check if we have time in RTC
+      // get time and print it
+      struct tm timeinfo;
+      if (getTime(&timeinfo) == ESP_OK) {
+        auto timer = mktime(&timeinfo);
+        struct timeval tv;
+        tv.tv_sec = timer;
+        tv.tv_usec = 0;
+        settimeofday(&tv, nullptr);
+      };
     }
 
     bool Rtc::initSensors() {
